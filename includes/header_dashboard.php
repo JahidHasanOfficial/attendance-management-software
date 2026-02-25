@@ -18,7 +18,9 @@
             --dark-color: #5a5c69;
             --sidebar-width: 250px;
         }
-        body { font-family: 'Inter', sans-serif; background-color: #f8f9fc; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9fc; overflow-x: hidden; }
+        
+        /* Sidebar Responsive */
         .sidebar {
             width: var(--sidebar-width);
             height: 100vh;
@@ -27,12 +29,27 @@
             top: 0;
             background: linear-gradient(180deg, #4e73df 10%, #224abe 100%);
             color: white;
-            z-index: 1000;
+            z-index: 1050;
+            transition: all 0.3s;
         }
+        
         .sidebar .nav-link { color: rgba(255,255,255,.8); padding: 1rem 1.5rem; font-weight: 500; }
         .sidebar .nav-link:hover, .sidebar .nav-link.active { color: white; background: rgba(255,255,255,.1); }
-        .main-content { margin-left: var(--sidebar-width); padding: 2rem; }
-        .navbar { margin-left: var(--sidebar-width); background: white; box-shadow: 0 .15rem 1.75rem 0 rgba(58,59,69,.15); }
+        
+        .main-content { transition: all 0.3s; padding: 1.5rem; }
+        .navbar { background: white; box-shadow: 0 .15rem 1.75rem 0 rgba(58,59,69,.15); transition: all 0.3s; }
+
+        @media (min-width: 992px) {
+            .main-content { margin-left: var(--sidebar-width); }
+            .navbar { margin-left: var(--sidebar-width); }
+        }
+
+        @media (max-width: 991.98px) {
+            .sidebar { left: calc(var(--sidebar-width) * -1); }
+            .sidebar.show { left: 0; }
+            .navbar-brand { font-size: 0.9rem; }
+        }
+
         .card { border: none; box-shadow: 0 .15rem 1.75rem 0 rgba(58,59,69,.15); border-radius: .5rem; transition: transform 0.2s; }
         .card:hover { transform: translateY(-5px); }
         .stats-card { border-left: .25rem solid !important; }
@@ -40,12 +57,30 @@
         .stats-card.success { border-left-color: var(--success-color) !important; }
         .stats-card.warning { border-left-color: var(--warning-color) !important; }
         .stats-card.danger { border-left-color: var(--danger-color) !important; }
+        
+        /* Overlay for mobile */
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0,0,0,0.5);
+            z-index: 1040;
+        }
+        .sidebar-overlay.show { display: block; }
     </style>
 </head>
 <body>
-    <div class="sidebar d-none d-md-block">
-        <div class="p-3 text-center border-bottom border-white border-opacity-25">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    
+    <div class="sidebar" id="sidebar">
+        <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-white border-opacity-25">
             <h5 class="fw-bold mb-0">AMS PRO</h5>
+            <button class="btn btn-link text-white d-lg-none" onclick="toggleSidebar()">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
         <ul class="nav flex-column mt-3">
             <li class="nav-item">
@@ -92,11 +127,16 @@
 
     <nav class="navbar navbar-expand navbar-light topbar mb-4 static-top">
         <div class="container-fluid">
-            <span class="navbar-brand text-muted"><?php echo $page_title ?? 'Dashboard'; ?></span>
+            <button class="btn btn-link d-lg-none me-3" onclick="toggleSidebar()">
+                <i class="bi bi-list fs-4"></i>
+            </button>
+            <span class="navbar-brand text-muted fw-bold d-none d-sm-inline-block"><?php echo $page_title ?? 'Dashboard'; ?></span>
             <ul class="navbar-nav ms-auto">
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle text-dark fw-bold" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
-                        <i class="bi bi-person-circle me-1"></i> <?php echo $_SESSION['name']; ?> (<?php echo $_SESSION['role']; ?>)
+                        <i class="bi bi-person-circle me-1"></i> 
+                        <span class="d-none d-md-inline"><?php echo $_SESSION['name']; ?></span>
+                        <span class="badge bg-primary ms-1 small d-none d-sm-inline-block"><?php echo $_SESSION['role']; ?></span>
                     </a>
                 </li>
             </ul>
@@ -104,3 +144,11 @@
     </nav>
 
     <div class="main-content">
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('show');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+        document.getElementById('sidebarOverlay').onclick = toggleSidebar;
+    </script>
