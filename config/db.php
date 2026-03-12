@@ -1,5 +1,6 @@
 <?php
 // config/db.php
+date_default_timezone_set('Asia/Dhaka');
 
 $host = 'localhost';
 $dbname = 'attendance_db';

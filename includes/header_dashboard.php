@@ -118,6 +118,12 @@
             </li>
             
             <li class="nav-item">
+                <a class="nav-link <?php echo $active_page == 'profile' ? 'active' : ''; ?>" href="profile.php">
+                    <i class="bi bi-person-badge me-2"></i> Profile
+                </a>
+            </li>
+            
+            <li class="nav-item">
                 <a class="nav-link" href="../logout.php">
                     <i class="bi bi-box-arrow-right me-2"></i> Logout
                 </a>

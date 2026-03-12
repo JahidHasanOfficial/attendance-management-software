@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
     branch_id INT,
     designation VARCHAR(100),
     phone VARCHAR(20),
+    face_image VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES roles(id),
     FOREIGN KEY (dept_id) REFERENCES departments(id),
