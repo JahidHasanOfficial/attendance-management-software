@@ -106,9 +106,9 @@ require_once '../includes/header_dashboard.php';
         <div class="card p-4">
             <h5 class="fw-bold mb-4">Quick Links</h5>
             <div class="d-grid gap-2">
-                <a href="users.php" class="btn btn-outline-primary text-start"><i class="bi bi-person-plus me-2"></i> Add New User</a>
-                <a href="departments.php" class="btn btn-outline-success text-start"><i class="bi bi-building-add me-2"></i> Manage Departments</a>
-                <a href="attendance.php" class="btn btn-outline-info text-start"><i class="bi bi-file-earmark-bar-graph me-2"></i> Attendance Sheet</a>
+                <a href="users" class="btn btn-outline-primary text-start"><i class="bi bi-person-plus me-2"></i> Add New User</a>
+                <a href="departments" class="btn btn-outline-success text-start"><i class="bi bi-building-add me-2"></i> Manage Departments</a>
+                <a href="attendance" class="btn btn-outline-info text-start"><i class="bi bi-file-earmark-bar-graph me-2"></i> Attendance Sheet</a>
             </div>
         </div>
     </div>

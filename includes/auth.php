@@ -8,12 +8,12 @@ function isLoggedIn() {
 
 function checkRole($allowed_roles) {
     if (!isLoggedIn()) {
-        header("Location: ../login.php");
+        header("Location: ../login");
         exit();
     }
     
     if (!in_array($_SESSION['role'], $allowed_roles)) {
-        header("Location: ../unauthorized.php");
+        header("Location: ../unauthorized");
         exit();
     }
 }
@@ -22,16 +22,16 @@ function redirectIfLoggedIn() {
     if (isLoggedIn()) {
         switch ($_SESSION['role']) {
             case 'Super Admin':
-                header("Location: admin/dashboard.php");
+                header("Location: admin/dashboard");
                 break;
             case 'HR':
-                header("Location: hr/dashboard.php");
+                header("Location: hr/dashboard");
                 break;
             case 'HOD':
-                header("Location: hod/dashboard.php");
+                header("Location: hod/dashboard");
                 break;
             case 'Employee':
-                header("Location: employee/dashboard.php");
+                header("Location: employee/dashboard");
                 break;
         }
         exit();

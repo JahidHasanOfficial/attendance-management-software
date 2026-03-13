@@ -9,90 +9,113 @@ $page_title = 'Branch Management';
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_branch'])) {
+    $division_id = $_POST['division_id'];
     $name = $_POST['branch_name'];
-    $lat = $_POST['latitude'];
-    $lng = $_POST['longitude'];
-    $radius = $_POST['radius_meters'];
 
     try {
-        $stmt = $pdo->prepare("INSERT INTO branches (branch_name, latitude, longitude, radius_meters) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$name, $lat, $lng, $radius]);
-        header("Location: branches.php?status=success");
+        $stmt = $pdo->prepare("INSERT INTO branches (division_id, branch_name) VALUES (?, ?)");
+        $stmt->execute([$division_id, $name]);
+        header("Location: branches?status=success");
         exit();
     } catch (PDOException $e) {
         $message = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>';
     }
 }
 
-if (isset($_GET['status']) && $_GET['status'] == 'success') {
-    $message = '<div class="alert alert-success">Branch added successfully!</div>';
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_branch'])) {
+    $id = $_POST['id'];
+    $division_id = $_POST['division_id'];
+    $name = $_POST['branch_name'];
+
+    try {
+        $stmt = $pdo->prepare("UPDATE branches SET division_id = ?, branch_name = ? WHERE id = ?");
+        $stmt->execute([$division_id, $name, $id]);
+        header("Location: branches?status=updated");
+        exit();
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-danger">Error: ' . $e->getMessage() . '</div>';
+    }
 }
 
-$branches = $pdo->query("SELECT * FROM branches ORDER BY id DESC")->fetchAll();
+if (isset($_GET['delete'])) {
+    $id = $_GET['delete'];
+    try {
+        $stmt = $pdo->prepare("DELETE FROM branches WHERE id = ?");
+        $stmt->execute([$id]);
+        header("Location: branches?status=deleted");
+        exit();
+    } catch (PDOException $e) {
+        $message = '<div class="alert alert-danger">Cannot delete: Branch is linked to other records.</div>';
+    }
+}
+
+if (isset($_GET['status'])) {
+    if ($_GET['status'] == 'success') {
+        $message = '<div class="alert alert-success">Branch added successfully!</div>';
+    } elseif ($_GET['status'] == 'updated') {
+        $message = '<div class="alert alert-success">Branch updated successfully!</div>';
+    } elseif ($_GET['status'] == 'deleted') {
+        $message = '<div class="alert alert-success">Branch deleted successfully!</div>';
+    }
+}
+
+$divisions = $pdo->query("SELECT * FROM divisions ORDER BY division_name ASC")->fetchAll();
+$branches = $pdo->query("SELECT b.*, d.division_name FROM branches b LEFT JOIN divisions d ON b.division_id = d.id ORDER BY b.id DESC")->fetchAll();
 
 require_once '../includes/header_dashboard.php';
 ?>
 
 <div class="row">
     <div class="col-md-4">
-        <div class="card p-4">
+        <div class="card p-4 shadow-sm">
             <h5 class="fw-bold mb-4">Add New Branch</h5>
             <form method="POST">
                 <input type="hidden" name="add_branch" value="1">
                 <div class="mb-3">
-                    <label class="form-label">Branch Name</label>
+                    <label class="form-label text-muted small fw-bold">DIVISION <span class="text-danger">*</span></label>
+                    <select name="division_id" class="form-select" required>
+                        <option value="">Select Division</option>
+                        <?php foreach($divisions as $div): ?>
+                            <option value="<?php echo $div['id']; ?>"><?php echo htmlspecialchars($div['division_name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small fw-bold">BRANCH NAME</label>
                     <input type="text" name="branch_name" class="form-control" required placeholder="e.g. Dhaka HQ">
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Latitude</label>
-                    <input type="number" step="any" name="latitude" class="form-control" required placeholder="e.g. 23.8103">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Longitude</label>
-                    <input type="number" step="any" name="longitude" class="form-control" required placeholder="e.g. 90.4125">
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Allowed Radius (Meters)</label>
-                    <input type="number" name="radius_meters" class="form-control" value="500" required>
-                    <small class="text-muted">Employees must be within this distance to mark attendance.</small>
-                </div>
-                <button type="submit" class="btn btn-primary w-100">Create Branch</button>
+                <button type="submit" class="btn btn-primary w-100 fw-bold">Create Branch</button>
             </form>
-            
-            <hr class="my-4">
-            <div class="alert alert-info py-2">
-                <small><i class="bi bi-info-circle me-1"></i> Tip: Use Google Maps to find Latitude and Longitude.</small>
-            </div>
         </div>
     </div>
     
     <div class="col-md-8">
         <?php echo $message; ?>
-        <div class="card p-4">
+        <div class="card p-4 shadow-sm">
             <h5 class="fw-bold mb-4">Branch List</h5>
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
+                            <th>#ID</th>
+                            <th>Division</th>
                             <th>Branch Name</th>
-                            <th>Coordinates</th>
-                            <th>Radius</th>
                             <th>Created At</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach($branches as $branch): ?>
-                        <tr>
-                            <td class="fw-bold"><?php echo $branch['branch_name']; ?></td>
-                            <td>
-                                <span class="badge bg-light text-dark"><?php echo $branch['latitude']; ?>, <?php echo $branch['longitude']; ?></span>
-                            </td>
-                            <td><?php echo $branch['radius_meters']; ?>m</td>
+                         <tr>
+                            <td>#<?php echo htmlspecialchars($branch['id']); ?></td>
+                            <td><span class="badge bg-soft-primary text-primary border border-primary px-3"><?php echo htmlspecialchars($branch['division_name'] ?? 'N/A'); ?></span></td>
+                            <td class="fw-bold"><?php echo htmlspecialchars($branch['branch_name']); ?></td>
                             <td class="small text-muted"><?php echo date('d M Y', strtotime($branch['created_at'])); ?></td>
                             <td>
-                                <button class="btn btn-sm btn-info text-white"><i class="bi bi-pencil"></i></button>
-                                <button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button>
+                                <!-- Edit Button -->
+                                <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#editModal<?php echo $branch['id']; ?>"><i class="bi bi-pencil"></i></button>
+                                <!-- Delete Button -->
+                                <a href="branches?delete=<?php echo $branch['id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this branch?');"><i class="bi bi-trash"></i></a>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -102,5 +125,48 @@ require_once '../includes/header_dashboard.php';
         </div>
     </div>
 </div>
+
+<!-- Edit Modals -->
+<?php foreach($branches as $branch): ?>
+<div class="modal fade" id="editModal<?php echo $branch['id']; ?>" tabindex="-1" aria-labelledby="editModalLabel<?php echo $branch['id']; ?>" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="editModalLabel<?php echo $branch['id']; ?>">Edit Branch</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="edit_branch" value="1">
+                    <input type="hidden" name="id" value="<?php echo $branch['id']; ?>">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">DIVISION</label>
+                        <select name="division_id" class="form-select" required>
+                            <option value="">Select Division</option>
+                            <?php foreach($divisions as $div): ?>
+                                <option value="<?php echo $div['id']; ?>" <?php echo ($branch['division_id'] == $div['id']) ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($div['division_name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">BRANCH NAME</label>
+                        <input type="text" name="branch_name" class="form-control" value="<?php echo htmlspecialchars($branch['branch_name']); ?>" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary fw-bold">Save Changes</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endforeach; ?>
+
+<style>
+.bg-soft-primary { background-color: rgba(13, 110, 253, 0.1); }
+</style>
 
 <?php require_once '../includes/footer_dashboard.php'; ?>

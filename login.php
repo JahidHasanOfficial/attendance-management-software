@@ -15,12 +15,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $user = $stmt->fetch();
 
     if ($user && password_verify($password, $user['password'])) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['name'] = $user['name'];
-        $_SESSION['role'] = $user['role_name'];
-        $_SESSION['dept_id'] = $user['dept_id'];
-        
-        redirectIfLoggedIn();
+        if ($user['status'] !== 'Active') {
+            $error = "Your account is inactive. Please contact the administrator.";
+        } else {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['name'] = $user['name'];
+            $_SESSION['role'] = $user['role_name'];
+            $_SESSION['dept_id'] = $user['dept_id'];
+            
+            redirectIfLoggedIn();
+        }
     } else {
         $error = "Invalid email or password.";
     }

@@ -2,7 +2,7 @@
 require_once '../includes/auth.php';
 require_once '../config/db.php';
 
-checkRole(['Employee']);
+checkRole(['Super Admin']);
 
 $active_page = 'profile';
 $page_title = 'User Profile';
@@ -80,7 +80,7 @@ require_once '../includes/header_dashboard.php';
                 </div>
             <?php endif; ?>
             <h5 class="fw-bold mb-1"><?php echo htmlspecialchars($user['name']); ?></h5>
-            <p class="text-muted small mb-3"><?php echo htmlspecialchars($user['designation'] ?? 'Employee'); ?></p>
+            <p class="text-muted small mb-3"><?php echo htmlspecialchars($user['designation'] ?? 'Admin'); ?></p>
             <div>
                 <span class="badge bg-primary px-3 py-2 rounded-pill"><?php echo htmlspecialchars($_SESSION['role']); ?></span>
             </div>
