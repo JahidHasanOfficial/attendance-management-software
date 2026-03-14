@@ -87,6 +87,9 @@ require_once '../includes/header_dashboard.php';
                     <input type="hidden" name="latitude" id="lat">
                     <input type="hidden" name="longitude" id="lng">
                     <input type="hidden" name="accuracy" id="accuracy">
+                    <input type="hidden" name="altitude" id="altitude">
+                    <input type="hidden" name="speed" id="speed">
+                    <input type="hidden" name="integrity_token" id="integrity_token">
                 </form>
             </div>
         </div>
@@ -171,15 +174,16 @@ function markAttendance(action) {
     
     const failIntegrity = (reason) => {
         statusMessage.innerHTML = `<span class="text-danger small"><i class="bi bi-exclamation-triangle-fill"></i> ${reason}</span>`;
+        console.error("Security Block:", reason);
         setTimeout(() => {
             statusSection.classList.add('d-none');
             if(actionArea) actionArea.classList.remove('d-none');
             if(checkOutArea) checkOutArea.classList.remove('d-none');
-        }, 3000);
+        }, 5000);
     };
 
     const handleGeoError = (error) => {
-        let msg = "Error: " + error.message;
+        let msg = "Location Error: " + error.message;
         statusMessage.innerHTML = `<span class="text-danger small">${msg}</span>`;
         setTimeout(() => {
             statusSection.classList.add('d-none');
@@ -192,36 +196,128 @@ function markAttendance(action) {
     if(checkOutArea) checkOutArea.classList.add('d-none');
     
     statusSection.classList.remove('d-none');
-    statusMessage.innerHTML = '<i class="bi bi-geo-fill"></i> Getting location...';
+    statusMessage.innerHTML = '<i class="bi bi-shield-lock"></i> Initializing Secure Geo-Link...';
 
     if (navigator.geolocation) {
         const options = { 
             enableHighAccuracy: true, 
-            timeout: 10000, 
+            timeout: 25000, 
             maximumAge: 0 
         };
 
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
+        // 0. Automation Check
+        if (navigator.webdriver) {
+            failIntegrity("Security Alert: Automated browser environment detected.");
+            return;
+        }
 
-                if (accuracy < 0.5) {
-                    failIntegrity("Security Alert: Artificial signal detected.");
+        let readings = [];
+        let watchId = navigator.geolocation.watchPosition(
+            (position) => {
+                const coords = position.coords;
+                
+                // 1. Filter invalid uninitialized signal (0,0)
+                if (coords.latitude === 0 && coords.longitude === 0) {
+                    statusMessage.innerHTML = `<i class="bi bi-satellite-fill"></i> Waiting for valid GPS lock...`;
                     return;
                 }
 
-                document.getElementById('lat').value = lat;
-                document.getElementById('lng').value = lng;
-                document.getElementById('accuracy').value = accuracy;
+                // 2. Android/Browser Mock Check (Various implementations)
+                const isMocked = coords.mocked || position.mocked || (position.raw && position.raw.mocked);
+                
+                if (isMocked === true) {
+                    navigator.geolocation.clearWatch(watchId);
+                    failIntegrity("Security Alert: Developer Mock Location Detected.");
+                    return;
+                }
 
-                statusMessage.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Verified!</span>';
-                form.submit();
+                readings.push({
+                    lat: coords.latitude,
+                    lng: coords.longitude,
+                    accuracy: coords.accuracy,
+                    altitude: coords.altitude,
+                    speed: coords.speed,
+                    timestamp: position.timestamp
+                });
+
+                statusMessage.innerHTML = `<i class="bi bi-satellite"></i> Authenticating Signal (${readings.length}/5)...`;
+
+                if (readings.length >= 5) {
+                    navigator.geolocation.clearWatch(watchId);
+                    
+                    // 2. Hardware Jitter Analysis (Anti-Programmatic)
+                    const uniqueLats = new Set(readings.map(r => r.lat)).size;
+                    const uniqueLngs = new Set(readings.map(r => r.lng)).size;
+                    
+                    // If 5 readings are EXACTLY identical, it's 100% a mock app injecting coordinates
+                    if (uniqueLats === 1 && uniqueLngs === 1) {
+                        failIntegrity("Security Alert: Static signal detected. Please use real GPS.");
+                        return;
+                    }
+
+                    // 3. Programmatic Jitter Pattern Check
+                    if (readings.length > 3) {
+                        let stepSizes = [];
+                        for(let i=1; i<readings.length; i++) {
+                            stepSizes.push((readings[i].lat - readings[i-1].lat).toFixed(8));
+                        }
+                        const uniqueSteps = new Set(stepSizes).size;
+                        if (uniqueSteps === 1 && stepSizes[0] !== "0.00000000") {
+                            failIntegrity("Security Alert: Synthetic movement signature detected.");
+                            return;
+                        }
+                    }
+
+                    // 4. Verification & Submission
+                    const final = readings[readings.length-1];
+                    document.getElementById('lat').value = final.lat;
+                    document.getElementById('lng').value = final.lng;
+                    document.getElementById('accuracy').value = final.accuracy;
+                    document.getElementById('altitude').value = final.altitude || 0;
+                    document.getElementById('speed').value = final.speed || 0;
+                    document.getElementById('integrity_token').value = btoa(Date.now() + "_" + Math.random());
+
+                    statusMessage.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle-fill"></i> Secure Link Verified!</span>';
+                    setTimeout(() => form.submit(), 1000);
+                }
             },
-            (error) => handleGeoError(error),
+            (error) => {
+                navigator.geolocation.clearWatch(watchId);
+                handleGeoError(error);
+            },
             options
         );
+
+        // Fail-safe
+        setTimeout(() => {
+            navigator.geolocation.clearWatch(watchId);
+            if (readings.length > 0 && readings.length < 5) {
+                const last = readings[readings.length-1];
+                
+                // Set values
+                document.getElementById('lat').value = last.lat;
+                document.getElementById('lng').value = last.lng;
+                document.getElementById('accuracy').value = last.accuracy;
+                document.getElementById('altitude').value = last.altitude || 0;
+                document.getElementById('speed').value = last.speed || 0;
+                document.getElementById('integrity_token').value = btoa(Date.now() + "_" + Math.random());
+
+                if (last.accuracy < 1.0) {
+                    failIntegrity("Security Alert: Unstable artificial signal.");
+                } else {
+                    statusMessage.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle-fill"></i> Verified via Satellite!</span>';
+                    setTimeout(() => form.submit(), 1000);
+                }
+            } else if (readings.length === 0) {
+                statusMessage.innerHTML = '<span class="text-danger small">No GPS Lock. Move to an outdoor area.</span>';
+                setTimeout(() => {
+                    statusSection.classList.add('d-none');
+                    if(actionArea) actionArea.classList.remove('d-none');
+                    if(checkOutArea) checkOutArea.classList.remove('d-none');
+                }, 3000);
+            }
+        }, 22000);
+
     } else {
         statusMessage.innerHTML = 'Geolocation not supported.';
     }

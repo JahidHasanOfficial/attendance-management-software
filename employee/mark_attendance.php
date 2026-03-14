@@ -9,11 +9,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $today = date('Y-m-d');
     $time = date('H:i:s');
     $action = $_POST['action'] ?? '';
+    $integrity_token = $_POST['integrity_token'] ?? '';
+
+    if (empty($integrity_token)) {
+        header("Location: dashboard?status_msg=Security Violation: Unauthorized submission attempt.&status_type=danger");
+        exit();
+    }
 
     // Location data from POST
     $lat = $_POST['latitude'] ?? 0;
     $lng = $_POST['longitude'] ?? 0;
     $accuracy = $_POST['accuracy'] ?? 0;
+    $altitude = $_POST['altitude'] ?? 0;
+    $speed = $_POST['speed'] ?? 0;
+
+    // Advanced Jitter & Signal Analysis (Server-Side)
+    // Real devices with < 10m accuracy almost always report some altitude and non-zero speed if handheld.
+    if ($accuracy < 5.0 && $altitude == 0 && $speed == 0) {
+        // This is a common signature of "High Accuracy" Mocking apps
+        // Real hardware < 5m accuracy almost always has a non-zero altitude reading from GPS satellites
+        $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, 'Fake GPS', $lat, $lng, $accuracy, $_SERVER['REMOTE_ADDR'], "Static signal signature: Acc=$accuracy, Alt=$altitude, Speed=$speed. Likely high-confidence emulation."]);
+        
+        // We log and block as suspicious
+        header("Location: dashboard?status_msg=Security Alert: Detected high-confidence signal injection. Please use your phone's real sensors.&status_type=danger");
+        exit();
+    }
 
     // Calculate distance using Haversine Formula
     if (!function_exists('getDistance')) {
@@ -29,77 +50,85 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     // Anti-Spoofing: Smart Integrity Check
     $current_user_ip = $_SERVER['REMOTE_ADDR'];
-    $ip_details = @json_decode(file_get_contents("http://ip-api.com/json/{$current_user_ip}?fields=status,city,country,regionName"));
+    $ip_details = null;
     
-    // Check for "Teleportation" - GPS says Office, but IP says different City/Region
-    // This is optional but highly effective as Fake GPS doesn't change IP.
-    if ($ip_details && $ip_details->status === 'success') {
-        $ip_city = $ip_details->city;
-        $ip_region = $ip_details->regionName;
-        // In a real scenario, you could verify if this matches the branch city
-        // For now, let's log this for Admin review to catch spoofers
+    // Skip external API for local development
+    if ($current_user_ip !== '127.0.0.1' && $current_user_ip !== '::1') {
+        $ctx = stream_context_create(['http' => ['timeout' => 4]]); 
+        // Request lat,lon and proxy status for more advanced check
+        $ip_details = @json_decode(file_get_contents("http://ip-api.com/json/{$current_user_ip}?fields=status,city,regionName,lat,lon,proxy,hosting", false, $ctx));
     }
-
-    // Anti-Spoofing Level 1: Strict Accuracy for Smartphones
-    // Real smartphones under clear sky (near window) are 3m to 20m.
-    // Fake GPS often reports 0 or suspicious constant values.
-    if ($accuracy < 1.0) {
-        $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$user_id, 'Fake GPS', $lat, $lng, $accuracy, $current_user_ip, "Impossible accuracy ($accuracy) detected. Likely Mock Location app."]);
-        
-        header("Location: dashboard?status_msg=Network Security Error: Invalid satellite signal detected. Please use a real phone.&status_type=danger");
-        exit();
-    }
-
-    // Anti-Spoofing Level 2: IP-to-City Verification (Secondary Check)
-    // This prevents users from using VPN + Fake GPS to teleport across cities.
-    $user_ip = $_SERVER['REMOTE_ADDR'];
-    // (Existing IP logic remains simplified as requested previously)
-
-
-    // Get user's assigned branch ID and individual timing overrides
-    $stmt = $pdo->prepare("SELECT b.*, u.start_time as u_start_time, u.end_time as u_end_time FROM branches b JOIN users u ON u.branch_id = b.id WHERE u.id = ?");
+    
+    // Get user's assigned branch
+    $stmt = $pdo->prepare("SELECT b.*, u.start_time as u_start_time, u.end_time as u_end_time 
+                           FROM branches b 
+                           JOIN users u ON u.branch_id = b.id 
+                           WHERE u.id = ?");
     $stmt->execute([$user_id]);
     $user_branch = $stmt->fetch();
 
     if (!$user_branch) {
-        header("Location: dashboard?status_msg=No branch assigned. Contact HR.&status_type=danger");
+        header("Location: dashboard?status_msg=No branch assigned.&status_type=danger");
         exit();
     }
 
-    // (Network verification removed as per user request for shared IP environments)
-
-    // Get all allowed distances for this branch
-    $stmt = $pdo->prepare("SELECT * FROM distances WHERE branch_id = ?");
-    $stmt->execute([$user_branch['id']]);
-    $allowed_locations = $stmt->fetchAll();
-
-    if (empty($allowed_locations)) {
-        header("Location: dashboard?status_msg=No location settings found for your branch. Contact Administrator.&status_type=danger");
-        exit();
-    }
-
-    $is_within_range = false;
-    $min_distance = -1;
-
-    foreach ($allowed_locations as $loc) {
-        $dist = getDistance($lat, $lng, $loc['latitude'], $loc['longitude']);
-        if ($min_distance == -1 || $dist < $min_distance) {
-            $min_distance = $dist;
-        }
-        if ($dist <= $loc['radius_meters']) {
-            $is_within_range = true;
-            break;
-        }
-    }
-
-    if (!$is_within_range) {
-        $dist_rounded = round($min_distance);
+    // IP-to-GPS Distance Verification
+    if ($ip_details && $ip_details->status === 'success') {
+        $ip_lat = $ip_details->lat;
+        $ip_lon = $ip_details->lon;
         
-        $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$user_id, 'Out of Range', $lat, $lng, $accuracy, $_SERVER['REMOTE_ADDR'], "User tried to mark attendance from $dist_rounded meters away."]);
+        // Calculate distance between IP reported location and GPS reported location
+        $ip_gps_dist = getDistance($lat, $lng, $ip_lat, $ip_lon);
+        
+        // If GPS says office (Dhaka) but IP says user is > 50km away (e.g. at home in another district)
+        if ($ip_gps_dist > 50000) { // 50km threshold is safe for Bangladesh ISP routing
+             $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+             $stmt->execute([$user_id, 'Suspicious IP', $lat, $lng, $accuracy, $current_user_ip, "IP-GPS Mismatch: IP location ($ip_lat, $ip_lon) is " . round($ip_gps_dist/1000) . "km away from GPS location."]);
+             
+             header("Location: dashboard?status_msg=Security Alert: Your internet signal is coming from a different city. Please turn off VPN and Use Mobile Data.&status_type=danger");
+             exit();
+        }
 
-        header("Location: dashboard?status_msg=You are too far ($dist_rounded m away) from any allowed location for your branch.&status_type=danger");
+        // Check for Proxy/VPN/Datacenter IPs
+        if ($ip_details->proxy || $ip_details->hosting) {
+             $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+             $stmt->execute([$user_id, 'Suspicious IP', $lat, $lng, $accuracy, $current_user_ip, "VPN/Proxy/Datacenter IP detected."]);
+             
+             header("Location: dashboard?status_msg=Security Alert: VPN or Proxy detected. Please use your real mobile network.&status_type=danger");
+             exit();
+        }
+    }
+
+    // Anti-Spoofing Level 1: Precise Accuracy Check
+    // Mock apps often report exactly 1.0, 5.0, 10.0 or 0.0. Real hardware has floating point jitter.
+    $is_exact_mock = in_array((float)$accuracy, [1.0, 5.0, 10.0, 15.0, 20.0]);
+    if ($accuracy < 0.3 || ($is_exact_mock && $altitude == 0 && $speed == 0)) {
+        $msg = ($accuracy < 0.3) ? "Impossible precision ($accuracy m)" : "Static accuracy pattern ($accuracy m)";
+        $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, 'Fake GPS', $lat, $lng, $accuracy, $current_user_ip, "$msg detected combined with zero sensor data."]);
+        
+        header("Location: dashboard?status_msg=Security Error: Artificial satellite signal detected. Please disable Mock Location.&status_type=danger");
+        exit();
+    }
+
+    // Reject invalid coordinates (0,0 is usually a failure)
+    if ($lat == 0 && $lng == 0) {
+        header("Location: dashboard?status_msg=Security Error: Your device reported an invalid location (0,0). Please refresh and try again.&status_type=danger");
+        exit();
+    }
+
+    // Calculate Distance to Branch
+    $branch_lat = $user_branch['latitude'];
+    $branch_lng = $user_branch['longitude'];
+    $dist = getDistance($lat, $lng, $branch_lat, $branch_lng);
+    $allowed_radius = $user_branch['radius_meters'] ?: 100;
+
+    if ($dist > $allowed_radius) {
+        $dist_rounded = round($dist);
+        $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$user_id, 'Out of Range', $lat, $lng, $accuracy, $_SERVER['REMOTE_ADDR'], "User ($lat, $lng) is $dist_rounded meters away from branch ($branch_lat, $branch_lng)."]);
+
+        header("Location: dashboard?status_msg=You are too far ($dist_rounded m away) from your branch. [Detected: $lat, $lng | Branch: $branch_lat, $branch_lng]&status_type=danger");
         exit();
     }
 

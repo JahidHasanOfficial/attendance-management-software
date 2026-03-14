@@ -84,6 +84,10 @@ require_once '../includes/header_dashboard.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold">BRANCH NAME <span class="text-danger">*</span></label>
+                        <input type="text" name="branch_name" placeholder="Enter branch name" class="form-control" required>
+                    </div>
                 <div class="row">
                     <div class="col-6 mb-3">
                         <label class="form-label text-muted small fw-bold">START TIME</label>
