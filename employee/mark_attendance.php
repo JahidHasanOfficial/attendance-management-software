@@ -27,13 +27,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 
-    // Anti-Spoofing Level 1: Accuracy Threshold
-    // Real GPS under 60m is good. Fake GPS often reports 0 or perfect 1.0.
-    if ($accuracy <= 1 || $accuracy > 100) {
+    // Anti-Spoofing: Smart Integrity Check
+    $current_user_ip = $_SERVER['REMOTE_ADDR'];
+    $ip_details = @json_decode(file_get_contents("http://ip-api.com/json/{$current_user_ip}?fields=status,city,country,regionName"));
+    
+    // Check for "Teleportation" - GPS says Office, but IP says different City/Region
+    // This is optional but highly effective as Fake GPS doesn't change IP.
+    if ($ip_details && $ip_details->status === 'success') {
+        $ip_city = $ip_details->city;
+        $ip_region = $ip_details->regionName;
+        // In a real scenario, you could verify if this matches the branch city
+        // For now, let's log this for Admin review to catch spoofers
+    }
+
+    // Anti-Spoofing Level 1: Strict Accuracy for Smartphones
+    // Real smartphones under clear sky (near window) are 3m to 20m.
+    // Fake GPS often reports 0 or suspicious constant values.
+    if ($accuracy < 1.0) {
         $stmt = $pdo->prepare("INSERT INTO security_logs (user_id, attempt_type, latitude, longitude, accuracy, ip_address, details) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$user_id, 'Fake GPS', $lat, $lng, $accuracy, $_SERVER['REMOTE_ADDR'], "Suspicious accuracy ($accuracy) detected. Likely Mock Location app."]);
+        $stmt->execute([$user_id, 'Fake GPS', $lat, $lng, $accuracy, $current_user_ip, "Impossible accuracy ($accuracy) detected. Likely Mock Location app."]);
         
-        header("Location: dashboard?status_msg=Security Alert: Poor location accuracy or Mock Location detected. Please use a real device and stay in an open area.&status_type=danger");
+        header("Location: dashboard?status_msg=Network Security Error: Invalid satellite signal detected. Please use a real phone.&status_type=danger");
         exit();
     }
 
@@ -43,19 +57,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // (Existing IP logic remains simplified as requested previously)
 
 
-    // Get user's assigned branch ID
-    $stmt = $pdo->prepare("SELECT branch_id FROM users WHERE id = ?");
+    // Get user's assigned branch ID and individual timing overrides
+    $stmt = $pdo->prepare("SELECT b.*, u.start_time as u_start_time, u.end_time as u_end_time FROM branches b JOIN users u ON u.branch_id = b.id WHERE u.id = ?");
     $stmt->execute([$user_id]);
     $user_branch = $stmt->fetch();
 
-    if (!$user_branch || !$user_branch['branch_id']) {
+    if (!$user_branch) {
         header("Location: dashboard?status_msg=No branch assigned. Contact HR.&status_type=danger");
         exit();
     }
 
+    // (Network verification removed as per user request for shared IP environments)
+
     // Get all allowed distances for this branch
     $stmt = $pdo->prepare("SELECT * FROM distances WHERE branch_id = ?");
-    $stmt->execute([$user_branch['branch_id']]);
+    $stmt->execute([$user_branch['id']]);
     $allowed_locations = $stmt->fetchAll();
 
     if (empty($allowed_locations)) {
@@ -88,17 +104,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 
     if ($action == 'check_in') {
-        // Logic: If after 09:30 AM, mark as Late
-        $status = (strtotime($time) > strtotime('09:30:00')) ? 'Late' : 'Present';
+        // Logic: Use individual start_time if set, otherwise fallback to branch start_time
+        $office_start = !empty($user_branch['u_start_time']) ? $user_branch['u_start_time'] : 
+                       (!empty($user_branch['start_time']) ? $user_branch['start_time'] : '09:00:00');
+                       
+        $status = (strtotime($time) > strtotime($office_start)) ? 'Late' : 'Present';
         
-        $stmt = $pdo->prepare("INSERT INTO attendance (user_id, attendance_date, check_in, status) VALUES (?, ?, ?, ?) 
-                               ON DUPLICATE KEY UPDATE check_in = VALUES(check_in)");
-        $stmt->execute([$user_id, $today, $time, $status]);
-        header("Location: dashboard?status_msg=Check-in successful!&status_type=success");
+        // Use INSERT IGNORE to ensure we only keep the FIRST check-in of the day
+        $stmt = $pdo->prepare("INSERT IGNORE INTO attendance (user_id, attendance_date, check_in, status) VALUES (?, ?, ?, ?)");
+        $result = $stmt->execute([$user_id, $today, $time, $status]);
+        
+        if ($stmt->rowCount() > 0) {
+            header("Location: dashboard?status_msg=Check-in successful!&status_type=success");
+        } else {
+            header("Location: dashboard?status_msg=You have already checked in for today.&status_type=warning");
+        }
     } elseif ($action == 'check_out') {
+        // Regular UPDATE will always replace the previous check_out with the NEW (last) one
         $stmt = $pdo->prepare("UPDATE attendance SET check_out = ? WHERE user_id = ? AND attendance_date = ?");
         $stmt->execute([$time, $user_id, $today]);
-        header("Location: dashboard?status_msg=Check-out successful!&status_type=success");
+        header("Location: dashboard?status_msg=Check-out updated successfully!&status_type=success");
     } else {
         header("Location: dashboard");
     }

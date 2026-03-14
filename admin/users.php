@@ -19,11 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_user'])) {
     $designation_id = $_POST['designation_id'];
     $phone = $_POST['phone'];
     $branch_id = $_POST['branch_id'];
+    $start_time = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
+    $end_time = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
     $status = $_POST['status'] ?? 'Active';
 
     try {
-        $stmt = $pdo->prepare("INSERT INTO users (employee_id, name, email, password, role_id, dept_id, designation_id, branch_id, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->execute([$employee_id, $name, $email, $password, $role_id, $dept_id, $designation_id, $branch_id, $phone, $status]);
+        $stmt = $pdo->prepare("INSERT INTO users (employee_id, name, email, password, role_id, dept_id, designation_id, branch_id, start_time, end_time, phone, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->execute([$employee_id, $name, $email, $password, $role_id, $dept_id, $designation_id, $branch_id, $start_time, $end_time, $phone, $status]);
         header("Location: users?status=success");
         exit();
     } catch (PDOException $e) {
@@ -54,16 +56,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_user'])) {
     $designation_id = $_POST['designation_id'];
     $branch_id = $_POST['branch_id'];
     $phone = $_POST['phone'];
+    $start_time = !empty($_POST['start_time']) ? $_POST['start_time'] : null;
+    $end_time = !empty($_POST['end_time']) ? $_POST['end_time'] : null;
     $status = $_POST['status'];
 
     try {
         if (!empty($_POST['password'])) {
             $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare("UPDATE users SET employee_id = ?, name = ?, email = ?, password = ?, role_id = ?, dept_id = ?, designation_id = ?, branch_id = ?, phone = ?, status = ? WHERE id = ?");
-            $stmt->execute([$employee_id, $name, $email, $password, $role_id, $dept_id, $designation_id, $branch_id, $phone, $status, $id]);
+            $stmt = $pdo->prepare("UPDATE users SET employee_id = ?, name = ?, email = ?, password = ?, role_id = ?, dept_id = ?, designation_id = ?, branch_id = ?, start_time = ?, end_time = ?, phone = ?, status = ? WHERE id = ?");
+            $stmt->execute([$employee_id, $name, $email, $password, $role_id, $dept_id, $designation_id, $branch_id, $start_time, $end_time, $phone, $status, $id]);
         } else {
-            $stmt = $pdo->prepare("UPDATE users SET employee_id = ?, name = ?, email = ?, role_id = ?, dept_id = ?, designation_id = ?, branch_id = ?, phone = ?, status = ? WHERE id = ?");
-            $stmt->execute([$employee_id, $name, $email, $role_id, $dept_id, $designation_id, $branch_id, $phone, $status, $id]);
+            $stmt = $pdo->prepare("UPDATE users SET employee_id = ?, name = ?, email = ?, role_id = ?, dept_id = ?, designation_id = ?, branch_id = ?, start_time = ?, end_time = ?, phone = ?, status = ? WHERE id = ?");
+            $stmt->execute([$employee_id, $name, $email, $role_id, $dept_id, $designation_id, $branch_id, $start_time, $end_time, $phone, $status, $id]);
         }
         header("Location: users?status=updated");
         exit();
@@ -187,8 +191,18 @@ require_once '../includes/header_dashboard.php';
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Phone Number (Unique)</label>
+                    <label class="form-label text-primary small fw-bold">Phone Number</label>
                     <input type="text" name="phone" class="form-control" required placeholder="e.g. 017xxxxxxxx">
+                </div>
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-danger small fw-bold">START TIME (OPTIONAL)</label>
+                        <input type="time" name="start_time" class="form-control">
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-danger small fw-bold">END TIME (OPTIONAL)</label>
+                        <input type="time" name="end_time" class="form-control">
+                    </div>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Status</label>
@@ -228,8 +242,14 @@ require_once '../includes/header_dashboard.php';
                             </td>
                             <td><span class="badge bg-secondary"><?php echo htmlspecialchars($user['role_name']); ?></span></td>
                             <td>
+                            <td>
                                 <div class="small fw-bold"><?php echo htmlspecialchars($user['dept_name'] ?? 'N/A'); ?></div>
                                 <div class="small text-muted"><?php echo htmlspecialchars($user['designation_name'] ?? 'N/A'); ?></div>
+                                <?php if ($user['start_time']): ?>
+                                    <div class="badge bg-soft-warning text-dark mt-1" style="font-size: 0.7rem;">
+                                        <i class="bi bi-clock"></i> <?php echo date('h:i A', strtotime($user['start_time'])); ?>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <span class="badge bg-<?php echo $user['status'] == 'Active' ? 'success' : 'danger'; ?>">
@@ -315,8 +335,18 @@ require_once '../includes/header_dashboard.php';
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Phone Number (Unique)</label>
+                        <label class="form-label text-primary small fw-bold">Phone Number</label>
                         <input type="text" name="phone" class="form-control" value="<?php echo htmlspecialchars($user['phone']); ?>" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label text-danger small fw-bold">START TIME (OPTIONAL)</label>
+                            <input type="time" name="start_time" class="form-control" value="<?php echo ($user['start_time'] && $user['start_time'] != '00:00:00') ? date('H:i', strtotime($user['start_time'])) : ''; ?>">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label text-danger small fw-bold">END TIME (OPTIONAL)</label>
+                            <input type="time" name="end_time" class="form-control" value="<?php echo ($user['end_time'] && $user['end_time'] != '00:00:00') ? date('H:i', strtotime($user['end_time'])) : ''; ?>">
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Status</label>

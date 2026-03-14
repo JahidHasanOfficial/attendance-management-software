@@ -11,10 +11,12 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_branch'])) {
     $division_id = $_POST['division_id'];
     $name = $_POST['branch_name'];
+    $start_time = $_POST['start_time'];
+    $end_time = $_POST['end_time'];
 
     try {
-        $stmt = $pdo->prepare("INSERT INTO branches (division_id, branch_name) VALUES (?, ?)");
-        $stmt->execute([$division_id, $name]);
+        $stmt = $pdo->prepare("INSERT INTO branches (division_id, branch_name, start_time, end_time) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$division_id, $name, $start_time, $end_time]);
         header("Location: branches?status=success");
         exit();
     } catch (PDOException $e) {
@@ -26,10 +28,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['edit_branch'])) {
     $id = $_POST['id'];
     $division_id = $_POST['division_id'];
     $name = $_POST['branch_name'];
+    $start_time = $_POST['start_time'];
+    $end_time = $_POST['end_time'];
 
     try {
-        $stmt = $pdo->prepare("UPDATE branches SET division_id = ?, branch_name = ? WHERE id = ?");
-        $stmt->execute([$division_id, $name, $id]);
+        $stmt = $pdo->prepare("UPDATE branches SET division_id = ?, branch_name = ?, start_time = ?, end_time = ? WHERE id = ?");
+        $stmt->execute([$division_id, $name, $start_time, $end_time, $id]);
         header("Location: branches?status=updated");
         exit();
     } catch (PDOException $e) {
@@ -80,9 +84,15 @@ require_once '../includes/header_dashboard.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label text-muted small fw-bold">BRANCH NAME</label>
-                    <input type="text" name="branch_name" class="form-control" required placeholder="e.g. Dhaka HQ">
+                <div class="row">
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small fw-bold">START TIME</label>
+                        <input type="time" name="start_time" class="form-control" value="09:00" required>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <label class="form-label text-muted small fw-bold">END TIME</label>
+                        <input type="time" name="end_time" class="form-control" value="17:00" required>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary w-100 fw-bold">Create Branch</button>
             </form>
@@ -100,6 +110,7 @@ require_once '../includes/header_dashboard.php';
                             <th>#ID</th>
                             <th>Division</th>
                             <th>Branch Name</th>
+                            <th>Office Time</th>
                             <th>Created At</th>
                             <th>Actions</th>
                         </tr>
@@ -110,6 +121,18 @@ require_once '../includes/header_dashboard.php';
                             <td>#<?php echo htmlspecialchars($branch['id']); ?></td>
                             <td><span class="badge bg-soft-primary text-primary border border-primary px-3"><?php echo htmlspecialchars($branch['division_name'] ?? 'N/A'); ?></span></td>
                             <td class="fw-bold"><?php echo htmlspecialchars($branch['branch_name']); ?></td>
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    <i class="bi bi-clock me-1 text-primary"></i> 
+                                    <?php 
+                                    $s = $branch['start_time'];
+                                    $e = $branch['end_time'];
+                                    echo ($s && $s != '00:00:00') ? date('h:i A', strtotime($s)) : '---';
+                                    echo ' - ';
+                                    echo ($e && $e != '00:00:00') ? date('h:i A', strtotime($e)) : '---';
+                                    ?>
+                                </span>
+                            </td>
                             <td class="small text-muted"><?php echo date('d M Y', strtotime($branch['created_at'])); ?></td>
                             <td>
                                 <!-- Edit Button -->
@@ -153,6 +176,16 @@ require_once '../includes/header_dashboard.php';
                     <div class="mb-3">
                         <label class="form-label text-muted small fw-bold">BRANCH NAME</label>
                         <input type="text" name="branch_name" class="form-control" value="<?php echo htmlspecialchars($branch['branch_name']); ?>" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label text-muted small fw-bold">START TIME</label>
+                            <input type="time" name="start_time" class="form-control" value="<?php echo ($branch['start_time'] && $branch['start_time'] != '00:00:00') ? date('H:i', strtotime($branch['start_time'])) : ''; ?>" required>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label text-muted small fw-bold">END TIME</label>
+                            <input type="time" name="end_time" class="form-control" value="<?php echo ($branch['end_time'] && $branch['end_time'] != '00:00:00') ? date('H:i', strtotime($branch['end_time'])) : ''; ?>" required>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">

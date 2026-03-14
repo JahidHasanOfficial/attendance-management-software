@@ -69,15 +69,9 @@ require_once '../includes/header_dashboard.php';
                     </div>
                     
                     <div id="checkOutArea">
-                        <?php if (!$today_attendance['check_out']): ?>
-                            <button type="button" onclick="markAttendance('check_out')" class="btn btn-warning btn-lg px-5 py-3 rounded-pill fw-bold shadow text-white">
-                                <i class="bi bi-box-arrow-left me-2"></i> CHECK OUT NOW
-                            </button>
-                        <?php else: ?>
-                            <div class="bg-success bg-opacity-10 text-success p-3 rounded-pill border border-success d-inline-block px-5">
-                                <i class="bi bi-check-circle-fill me-2"></i> <strong>Shift Completed</strong>
-                            </div>
-                        <?php endif; ?>
+                        <button type="button" onclick="markAttendance('check_out')" class="btn btn-warning btn-lg px-5 py-3 rounded-pill fw-bold shadow text-white">
+                            <i class="bi bi-box-arrow-left me-2"></i> CHECK OUT NOW
+                        </button>
                     </div>
                 <?php endif; ?>
 
@@ -171,27 +165,50 @@ function markAttendance(action) {
     
     document.getElementById('attendanceAction').value = action;
     
-    // Hide buttons, show status
+    // UI state
     const actionArea = document.getElementById('attendanceActionArea');
     const checkOutArea = document.getElementById('checkOutArea');
+    
+    const failIntegrity = (reason) => {
+        statusMessage.innerHTML = `<span class="text-danger small"><i class="bi bi-exclamation-triangle-fill"></i> ${reason}</span>`;
+        setTimeout(() => {
+            statusSection.classList.add('d-none');
+            if(actionArea) actionArea.classList.remove('d-none');
+            if(checkOutArea) checkOutArea.classList.remove('d-none');
+        }, 3000);
+    };
+
+    const handleGeoError = (error) => {
+        let msg = "Error: " + error.message;
+        statusMessage.innerHTML = `<span class="text-danger small">${msg}</span>`;
+        setTimeout(() => {
+            statusSection.classList.add('d-none');
+            if(actionArea) actionArea.classList.remove('d-none');
+            if(checkOutArea) checkOutArea.classList.remove('d-none');
+        }, 3000);
+    };
+
     if(actionArea) actionArea.classList.add('d-none');
     if(checkOutArea) checkOutArea.classList.add('d-none');
     
     statusSection.classList.remove('d-none');
-    statusMessage.innerHTML = "Verifying GPS location integrity...";
+    statusMessage.innerHTML = '<i class="bi bi-geo-fill"></i> Getting location...';
 
     if (navigator.geolocation) {
+        const options = { 
+            enableHighAccuracy: true, 
+            timeout: 10000, 
+            maximumAge: 0 
+        };
+
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
                 const accuracy = position.coords.accuracy;
 
-                // Anti-Spoofing Check: Very low accuracy (e.g. exactly 0 or 1) often indicates mock location
-                // High accuracy is good, but realistic GPS has at least some drift (3-15m usually).
-                // Many mock location apps return 0 accuracy.
-                if (accuracy <= 0) {
-                    statusMessage.innerHTML = '<span class="text-danger"><i class="bi bi-shield-lock-fill"></i> Security Alert: Fake location detected. Please disable mock location apps.</span>';
+                if (accuracy < 0.5) {
+                    failIntegrity("Security Alert: Artificial signal detected.");
                     return;
                 }
 
@@ -199,43 +216,14 @@ function markAttendance(action) {
                 document.getElementById('lng').value = lng;
                 document.getElementById('accuracy').value = accuracy;
 
-                statusMessage.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Location Verified. Saving...</span>';
-                
-                // Small delay to show success state
-                setTimeout(() => form.submit(), 500);
+                statusMessage.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill"></i> Verified!</span>';
+                form.submit();
             },
-            (error) => {
-                let msg = "";
-                switch(error.code) {
-                    case error.PERMISSION_DENIED: 
-                        msg = "Location permission denied. Please allow GPS access in browser settings."; 
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        msg = "Location unavailable. Ensure GPS is active.";
-                        break;
-                    case error.TIMEOUT:
-                        msg = "Location request timed out.";
-                        break;
-                    default: 
-                        msg = "An unknown location error occurred.";
-                }
-                statusMessage.innerHTML = `<span class="text-danger">${msg}</span>`;
-                
-                // Show buttons again after failure
-                setTimeout(() => {
-                    statusSection.classList.add('d-none');
-                    if(actionArea) actionArea.classList.remove('d-none');
-                    if(checkOutArea) checkOutArea.classList.remove('d-none');
-                }, 3000);
-            },
-            { 
-                enableHighAccuracy: true, 
-                timeout: 10000, 
-                maximumAge: 0 
-            }
+            (error) => handleGeoError(error),
+            options
         );
     } else {
-        statusMessage.innerHTML = '<span class="text-danger">Geolocation not supported by this browser.</span>';
+        statusMessage.innerHTML = 'Geolocation not supported.';
     }
 }
 </script>

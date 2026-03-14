@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS branches (
     id INT AUTO_INCREMENT PRIMARY KEY,
     division_id INT NOT NULL,
     branch_name VARCHAR(100) NOT NULL,
+    start_time TIME DEFAULT '09:00:00',
+    end_time TIME DEFAULT '17:00:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (division_id) REFERENCES divisions(id) ON DELETE CASCADE
 );
@@ -66,6 +68,8 @@ CREATE TABLE IF NOT EXISTS users (
     dept_id INT,
     designation_id INT,
     branch_id INT,
+    start_time TIME DEFAULT NULL,
+    end_time TIME DEFAULT NULL,
     phone VARCHAR(20) UNIQUE,
     face_image VARCHAR(255) DEFAULT NULL,
     status ENUM('Active', 'Inactive') DEFAULT 'Active',
